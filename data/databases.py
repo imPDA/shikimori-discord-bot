@@ -1,8 +1,8 @@
 import os
 
 from mysql import connector
-
-from data import MySQLVault, DiscordToken, ShikiToken, ShikiUser
+from .vault import MySQLVault
+from .datatypes import DiscordToken, ShikiToken, ShikiUser
 
 mydb = connector.connect(
     host=os.environ.get('DB_HOST'),
@@ -12,7 +12,7 @@ mydb = connector.connect(
     database=os.environ.get('DB_NAME'),
 )
 
-discord_tokens = MySQLVault(
+discord_tokens_vault = MySQLVault(
     sql_db=mydb,
     prototype=DiscordToken,
     table_name='shikimori_tokens',
@@ -20,7 +20,7 @@ discord_tokens = MySQLVault(
     create=True
 )
 
-shiki_tokens = MySQLVault(
+shiki_tokens_vault = MySQLVault(
     sql_db=mydb,
     prototype=ShikiToken,
     table_name='shikimori_tokens',
@@ -28,7 +28,7 @@ shiki_tokens = MySQLVault(
     create=True
 )
 
-shiki_users = MySQLVault(
+shiki_users_vault = MySQLVault(
     sql_db=mydb,
     prototype=ShikiUser,
     table_name='shikimori_users',

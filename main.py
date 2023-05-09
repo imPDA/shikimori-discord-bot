@@ -11,6 +11,9 @@ from cogs.shiki_commands.cog import ShikiCog
 from cogs.ctx_commands.cog import ContextMenuCog
 
 
+from data import discord_tokens_vault, shiki_tokens_vault, shiki_users_vault
+
+
 async def main():
     DISCORD_TOKEN = os.environ['BOT_TOKEN']
 
@@ -25,10 +28,6 @@ async def main():
         activity=discord.Game(name='/shikimori'),
 
     )
-
-    discord_tokens_vault = ...
-    shiki_tokens_vault = ...
-    shiki_users_vault = ...
 
     await my_bot.add_cog(ShikiCog(
         discord_tokens_vault=discord_tokens_vault,

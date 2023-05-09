@@ -1,3 +1,3 @@
 from .vault import Vault, MySQLVault
-from .databases import discord_tokens, shiki_tokens, shiki_users
 from .datatypes import DiscordToken, ShikiToken, ShikiUser
+from .databases import discord_tokens_vault, shiki_tokens_vault, shiki_users_vault
