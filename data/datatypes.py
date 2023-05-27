@@ -1,27 +1,5 @@
+from dlr_light_api.datatypes import MetadataField, MetadataType, Metadata
 from pydantic import BaseModel
-from datetime import datetime
-
-
-class DiscordToken(BaseModel):
-    type: str
-    access_token: str
-    refresh_token: str
-    expires_at: datetime = None
-
-    @property
-    def is_fresh(self):
-        return datetime.now() < self.expires_at
-
-
-class ShikiToken(BaseModel):
-    type: str = 'Bearer'
-    access_token: str
-    refresh_token: str
-    expires_at: datetime = None
-
-    @property
-    def is_fresh(self):
-        return datetime.now() < self.expires_at
 
 
 class ShikiUser(BaseModel):
@@ -29,3 +7,9 @@ class ShikiUser(BaseModel):
     shiki_nickname: str = ''
     anime_watched: int = 0
     total_hours: int = 0
+
+
+class ShikiMetadata(Metadata):
+    platform_name: str = 'shikimori.me'
+    titles_watched = MetadataField(MetadataType.INT_GTE, 'аниме просмотрено', 'или больше тайтлов')
+    hours_watching = MetadataField(MetadataType.INT_GTE, 'часов за проcмотром', 'часов или больше')

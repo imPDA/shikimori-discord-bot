@@ -2,14 +2,16 @@ from discord import Interaction, Member
 from discord.ext.commands import Cog, Bot
 from discord.app_commands import ContextMenu
 
+from data import Vault
+
 
 class ContextMenuCog(Cog):
     # TODO description
 
-    def __init__(self, bot: Bot, shiki_users_vault):
+    def __init__(self, bot: Bot, shiki_users_vault: Vault):
         super().__init__()
 
-        self.shiki_users = shiki_users_vault  # type: ignore
+        self.shiki_users = shiki_users_vault
         self.bot = bot
 
     def cog_load(self) -> None:

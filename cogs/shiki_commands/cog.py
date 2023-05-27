@@ -1,13 +1,19 @@
+import os
+from datetime import datetime
+
 from aiohttp import ClientResponseError
-from discord import Interaction, Message
+from discord import Interaction, Message, Embed
 from discord.app_commands import guilds, command, AppCommandError
 from discord.ext import commands
+from dlr_light_api import Client as DLRClient
+from dlr_light_api.datatypes import DiscordToken
 
-from clients.shikimori_client import BotShikiClient
+from shikimori_extended_api import Client as ShikiClient
+
 from data import Vault
+from data.datatypes import ShikiMetadata, ShikiUser
 
 from .views import AuthorizeView
-from clients import linked_role_client
 
 
 @guilds(922919845450903573, )
@@ -25,7 +31,11 @@ class ShikiCog(commands.GroupCog, group_name='shikimori', group_description='...
     async def authorize(self, interaction: Interaction):
         view = AuthorizeView()
 
-        shiki_client = BotShikiClient()
+        shiki_client = ShikiClient(
+            application_name=os.environ['SHIKI_APPLICATION_NAME'],
+            client_id=os.environ['SHIKI_CLIENT_ID'],
+            client_secret=os.environ['SHIKI_CLIENT_SECRET']
+        )
 
         await interaction.response.send_message(  # noqa
             f"1) Перейди по [ссылке]({shiki_client.auth_url}) и авторизуйся на Шикимори\n"
@@ -38,69 +48,75 @@ class ShikiCog(commands.GroupCog, group_name='shikimori', group_description='...
 
         msg: Message = await interaction.followup.send("Проверяю код...", ephemeral=True)
         try:
-            tokens = await shiki_client.get_access_token(view.auth_code)
+            print(view.auth_code)
+            token = await shiki_client.get_access_token(view.auth_code)
         except ClientResponseError as e:
             print(e)  # TODO logging
             return await msg.edit(content="❎ Код неверный!")
 
-        if tokens:
+        if token:
             await msg.edit(content="✅ Код верный!")
-            self.shiki_tokens.save(interaction.user.id, tokens)
-            await self.__update_info(client=shiki_client)
+            self.shiki_tokens.save(interaction.user.id, token)
+            await self._update_info(interaction.user.id)
         else:
             await msg.edit(content="❎ Код неверный!")
 
     @command(name='update', description="Обновить информацию")
     async def update(self, interaction: Interaction):
         await interaction.response.defer(thinking=True, ephemeral=True)  # noqa
-        await self.__update_info(interaction.user.id)
-        await interaction.response.send_message('Данные обновлены!')  # noqa
+        await self._update_info(interaction.user.id)
+        await interaction.edit_original_response(content="Данные обновлены!")
 
-    async def __update_info(self, user_id: int = None, *, client: BotShikiClient = None):
-        if not any([user_id, client]):
-            raise ValueError('Must provide at list one argument')
+    async def _update_info(self, user_id: int):
+        shiki_user = await self._get_shiki_user_from_website(user_id)
+        print('Sh1ki user:', shiki_user)
+        self.shiki_users.save(user_id, shiki_user)
 
-        if not client:
-            shiki_token = self.shiki_tokens.get(user_id)
-            client = BotShikiClient(
-                access_token=shiki_token.access_token,
-                refresh_token=shiki_token.refresh_token,
-                expires_at=shiki_token.expires_at,
-            )
+        discord_token: DiscordToken = self.discord_tokens.get(user_id)
+        if not discord_token:
+            return
 
-        shiki_info = await client.get_current_user_info()
+        dlr_client = DLRClient(
+            client_id=os.environ['DLR_CLIENT_ID'],
+            client_secret=os.environ['DLR_CLIENT_SECRET'],
+            redirect_uri=os.environ['DLR_REDIRECT_URI'],
+            discord_token=os.environ['BOT_TOKEN']
+        )
+
+        metadata = ShikiMetadata(
+            platform_username=shiki_user.shiki_nickname,
+            titles_watched=shiki_user.anime_watched,
+            hours_watching=shiki_user.total_hours
+        )
+
+        try:
+            print('Trying to push:', metadata.to_dict())  # TODO logging
+            await dlr_client.push_metadata(discord_token, metadata)
+        except Exception as e:  # unauthorized ?
+            print(e)
+            discord_token = await dlr_client.refresh_token(discord_token)
+            self.discord_tokens.update(user_id, discord_token)
+            await dlr_client.push_metadata(discord_token, metadata)
+
+    async def _get_shiki_user_from_website(self, user_id: int) -> ShikiUser:
+        shiki_token = self.shiki_tokens.get(user_id)
+        shiki_client = ShikiClient(
+            application_name=os.environ['SHIKI_APPLICATION_NAME'],
+            client_id=os.environ['SHIKI_CLIENT_ID'],
+            client_secret=os.environ['SHIKI_CLIENT_SECRET']
+        )
+
+        shiki_info = await shiki_client.get_current_user_info(shiki_token)
         shiki_id = shiki_info['id']
-        rates = await client.get_all_user_anime_rates(shiki_id, status='completed')
+        rates = await shiki_client.get_all_user_anime_rates(shiki_id, status='completed')
         # duration = await shiki_client.get_watch_time(shiki_id)  # float, in minutes
 
-        data = {
-            'shiki_id': shiki_id,
-            'shiki_nickname': shiki_info.get('nickname'),
-            'anime_watched': len(rates),
-            # 'total_hours': int(duration / 60),
-        }
-        data = self.shiki_users.save(user_id, data)
-
-        discord_token = self.discord_tokens.get(user_id)
-
-        metadata = data.dict(exclude={'shiki_id', 'shiki_nickname'})
-        try:
-            await linked_role_client.push_metadata(
-                user_id,
-                discord_token.access_token,
-                'Shikimori.me',  # TODO name as constant `Shikimori.me`
-                metadata,
-                platform_username=f"{data.shiki_nickname}",
-            )
-        except Exception as e:  # unauthorized ?
-            linked_role_client.refresh_tokens(discord_token)
-            await linked_role_client.push_metadata(
-                user_id,
-                discord_token.access_token,
-                'Shikimori.me',  # TODO name as constant `Shikimori.me`
-                metadata,
-                platform_username=f"{data.shiki_nickname}",
-            )
+        return ShikiUser(
+            shiki_id=shiki_id,
+            shiki_nickname=shiki_info.get('nickname'),
+            anime_watched=len(rates),
+            # 'total_hours': int(duration / 60)
+        )
 
     @authorize.error
     async def authorize_error(self, interaction: Interaction, error: AppCommandError):
@@ -114,7 +130,7 @@ class ShikiCog(commands.GroupCog, group_name='shikimori', group_description='...
     async def get_user_info(self, interaction: Interaction, shiki_id: int = 272747):
         """/api/users/:id/info"""
         await interaction.response.defer(thinking=True)
-        user_info = await self.shiki_users.get_user_info(shiki_id)
+        user_info = await self.shiki_users.get(shiki_id)
         embed = Embed(
             title=f"{user_info['nickname']} /{user_info['id']}/",
             url=user_info['url'],

@@ -680,3 +680,4 @@ cython_debug/
 /src/shikimori/db/settings.py
 /shikimori/db/settings.py
 /shikimori/server/settings.py
+/.env

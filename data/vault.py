@@ -1,5 +1,6 @@
 import inspect
-from datetime import datetime
+import json
+from datetime import datetime, timedelta
 from typing import Protocol, TypeVar, Type
 
 from mysql import connector
@@ -36,19 +37,20 @@ class MySQLVault(Vault):
         prototype = kwargs.get('prototype')
         table_name = kwargs.get('table_name')
 
-        if not cls.__is_table_exists(db, table_name):  # check if table exists
+        if not cls._is_table_exists(db, table_name):  # check if table exists
             if kwargs.pop('create', False):  # create table if `create` kwarg is `True`
                 print(f"Creating '{table_name}' table")  # TODO logging
-                cls.__create_table(db, table_name, prototype)
+                cls._create_table(db, table_name, prototype)
             else:
                 raise Exception(f"Table '{table_name}' is not found!")  # or raise an exception
 
         return instance
 
     @classmethod
-    def __create_table(cls, db: MySQLConnection, table_name: str, prototype: _T):
+    def _create_table(cls, db: MySQLConnection, table_name: str, prototype: _T):
         DATATYPES = {  # TODO
             datetime: 'DATETIME',
+            timedelta: 'FLOAT',  # pydantic .json() export exports `timedelta` as `float`
             int: 'INT',
             str: 'VARCHAR(45)',
             float: 'FLOAT'
@@ -67,10 +69,10 @@ class MySQLVault(Vault):
         cursor.close()
 
     @classmethod
-    def __is_table_exists(cls, db: MySQLConnection, table_name: str):
+    def _is_table_exists(cls, db: MySQLConnection, table_name: str):
         SQL = f"SELECT 1 FROM {table_name} LIMIT 1;"
 
-        cursor = db.cursor()
+        cursor = db.cursor(buffered=True)
 
         try:
             cursor.execute(SQL)
@@ -97,15 +99,15 @@ class MySQLVault(Vault):
         self.table_name = table_name
         self.pk_name = pk_name
 
-    def __clean_data(self, data: _T | dict) -> _T | None:
+    def _clean_data(self, data: _T | dict) -> _T | None:
         if self.prototype.__name__ != data.__repr_name__():
             try:
-                return data.parse_obj(data)
+                data = data.parse_obj(data)
             except Exception as e:
                 print(e)
                 raise TypeError("Wrong type!")
-        else:
-            return data  # TODO add validation check ?
+
+        return json.loads(data.json())
 
     def get(self, pk: int) -> BaseModel:
         fields = self.prototype.__fields__.keys()
@@ -124,12 +126,10 @@ class MySQLVault(Vault):
         return result and self.prototype.parse_obj(zip(fields, result))
 
     def save(self, pk: int, data: _T | dict) -> None:
-        data = self.__clean_data(data)
-
         if self.get(pk):
             return self.update(pk, data)
 
-        data = data.dict()
+        data = self._clean_data(data)  # transform to the right `dict` for building SQL expression
 
         SQL = inspect.cleandoc(f"""
             INSERT INTO {self.table_name} ({self.pk_name}, {', '.join(data.keys())}) 
@@ -142,11 +142,11 @@ class MySQLVault(Vault):
         cursor.close()
 
     def update(self, pk: int, data: _T) -> None:
-        data = self.__clean_data(data)
+        data = self._clean_data(data)  # transform to the right `dict` for building SQL expression
 
         SQL = inspect.cleandoc(f"""
             UPDATE {self.table_name}
-            SET {', '.join([f"{k} = '{v}'" for k, v in data.dict().items()])}
+            SET {', '.join([f"{k} = '{v}'" for k, v in data.items()])}
             WHERE {self.pk_name} = '{pk}';
         """)
 
