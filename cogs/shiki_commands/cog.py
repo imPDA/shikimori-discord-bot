@@ -16,6 +16,18 @@ from data.datatypes import ShikiMetadata, ShikiUser
 from .views import AuthorizeView
 
 
+ROOT_URL = 'https://shikimori.me'
+
+
+# https://stackoverflow.com/questions/48255244/python-check-if-a-string-contains-cyrillic-characters
+def contains_cyrillic(string: str) -> bool:
+    return len(string.encode("ascii", "ignore")) < len(string)
+
+
+def field_value(text: str) -> str:
+    return text[:1024-3] + "..." if len(text) > 1024 else text
+
+
 @guilds(922919845450903573, )
 class ShikiCog(commands.GroupCog, group_name='shikimori', group_description='...'):
     # TODO description
@@ -125,7 +137,7 @@ class ShikiCog(commands.GroupCog, group_name='shikimori', group_description='...
 
     @command(name='user', description="Показать информацию о пользователе")
     async def get_user_info(self, interaction: Interaction, name_or_id: str):
-        """/api/users/:id/info"""
+        """/api/users/:id/info or /api/users?search=:nickname"""
         await interaction.response.defer(thinking=True)
 
         shiki_client = ShikiClient(
@@ -158,11 +170,7 @@ class ShikiCog(commands.GroupCog, group_name='shikimori', group_description='...
         await interaction.edit_original_response(embed=embed)
 
     @get_user_info.autocomplete('name_or_id')
-    async def user_key_autocomplete(
-            self,
-            interaction: Interaction,
-            current: str
-    ) -> list[app_commands.Choice[str]]:
+    async def name_or_id_autocomplete(self, interaction: Interaction, current: str) -> list[app_commands.Choice[str]]:
         if current.isdigit():
             shiki_client = ShikiClient(
                 application_name=os.environ['SHIKI_APPLICATION_NAME'],
@@ -183,6 +191,81 @@ class ShikiCog(commands.GroupCog, group_name='shikimori', group_description='...
         users = await shiki_client.go().users(search=current.lower(), limit=20).get()  # real Discord limit is 25?
         return [app_commands.Choice(name=user['nickname'], value=str(user['id'])) for user in users]
 
+    @command(name='anime', description="Показать информацию об аниме")
+    async def get_anime_info(self, interaction: Interaction, name_or_id: str):
+        """/api/animes/:id or /api/animes?search=:name"""
+        await interaction.response.defer(thinking=True)
+
+        shiki_client = ShikiClient(
+            application_name=os.environ['SHIKI_APPLICATION_NAME'],
+            client_id=os.environ['SHIKI_CLIENT_ID'],
+            client_secret=os.environ['SHIKI_CLIENT_SECRET']
+        )
+
+        anime_id = int(name_or_id)
+
+        anime_info = await shiki_client.get_anime(anime_id)
+
+        embed = Embed(
+            title=f"{anime_info['russian']}\n{anime_info['japanese']}",
+            url=f"{ROOT_URL}{anime_info['url']}",
+            timestamp=datetime.now(),
+        )
+        embed.set_image(url=f"{ROOT_URL}{anime_info['image']['original']}")  # original / preview (?^?)
+
+        if not (score := float(anime_info.get('score', 0))):
+            scores = anime_info.get('rates_scores_stats', [{'name': 0, 'value': 1}])
+            score = sum([int(r['name']) * int(r['value']) for r in scores]) / sum([int(r['value']) for r in scores])
+        embed.add_field(name="Оценка", value=f"{score:.2f}")
+
+        if anime_info.get('status', '') == 'released':
+            episodes = f"{anime_info.get('episodes', '-')} (завершено)"
+        else:
+            episodes = f"{anime_info.get('episodes_aired', '-')} / {anime_info.get('episodes', '-')}"
+        embed.add_field(name="Эпизоды", value=episodes)
+
+        embed.add_field(name="Длительность", value=f"{anime_info.get('duration', '-')} мин")
+
+        genres = ', '.join([g['russian'] for g in anime_info.get('genres', [])]) or "-"
+        embed.add_field(name="Жанры", value=genres)
+
+        rating = anime_info.get('rating').replace('_', '-').upper() or "-"
+        embed.add_field(name="Рейтинг", value=rating)
+
+        embed.add_field(name="Описание", value=field_value(anime_info.get('description', "-")), inline=False)
+
+        embed.set_footer(text="shikimori.me", icon_url='https://shikimori.me/favicons/favicon-192x192.png')
+        await interaction.edit_original_response(embed=embed)
+
+    @get_anime_info.autocomplete('name_or_id')
+    async def name_or_id_autocomplete(self, interaction: Interaction, current: str) -> list[app_commands.Choice[str]]:
+        if current.isdigit():
+            shiki_client = ShikiClient(
+                application_name=os.environ['SHIKI_APPLICATION_NAME'],
+                client_id=os.environ['SHIKI_CLIENT_ID'],
+                client_secret=os.environ['SHIKI_CLIENT_SECRET']
+            )
+            user = await shiki_client.get_anime(int(current))
+            return [app_commands.Choice(name=user['russian'], value=str(user['id'])), ]
+
+        if len(current) < 3:
+            return []
+
+        shiki_client = ShikiClient(
+            application_name=os.environ['SHIKI_APPLICATION_NAME'],
+            client_id=os.environ['SHIKI_CLIENT_ID'],
+            client_secret=os.environ['SHIKI_CLIENT_SECRET']
+        )
+        animes = await shiki_client.go().animes(search=current.lower(), limit=20).get()  # real Discord limit is 25?
+        if contains_cyrillic(current):
+            return [app_commands.Choice(name=anime['russian'], value=str(anime['id'])) for anime in animes]
+        else:
+            return [app_commands.Choice(name=anime['name'], value=str(anime['id'])) for anime in animes]
+
     @get_user_info.error
     async def get_user_info_error(self, interaction: Interaction, error: AppCommandError):
+        print(error)  # TODO logging
+
+    @get_anime_info.error
+    async def get_anime_info_error(self, interaction: Interaction, error: AppCommandError):
         print(error)  # TODO logging
