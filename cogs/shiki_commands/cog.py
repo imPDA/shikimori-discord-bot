@@ -3,7 +3,7 @@ from datetime import datetime
 
 from aiohttp import ClientResponseError
 from discord import Interaction, Message, Embed, app_commands
-from discord.app_commands import guilds, command, AppCommandError
+from discord.app_commands import guilds, command, AppCommandError, describe
 from discord.ext import commands
 from dlr_light_api import Client as DLRClient
 from dlr_light_api.datatypes import DiscordToken
@@ -74,18 +74,19 @@ class ShikiCog(commands.GroupCog, group_name='shikimori', group_description='...
             await msg.edit(content="❎ Код неверный!")
 
     @command(name='update', description="Обновить информацию")
-    async def update(self, interaction: Interaction):
+    @describe(update_watch_time="Обновить время просмотра тоже (долго!)")
+    async def update(self, interaction: Interaction, update_watch_time: bool = False):
         await interaction.response.defer(thinking=True, ephemeral=True)  # noqa
-        await self._update_info(interaction.user.id)
+        await self._update_info(interaction.user.id, update_watch_time)
         await interaction.edit_original_response(content="Данные обновлены!")
 
-    async def _update_info(self, user_id: int) -> bool:
+    async def _update_info(self, user_id: int, calculate_watchtime: bool) -> bool:
         discord_token: DiscordToken = self.discord_tokens.get(user_id)
         if not discord_token:
             return False
 
-        shiki_user = await self._get_shiki_user(user_id)
-        print('Sh1ki user:', shiki_user)
+        shiki_id = self.shiki_users.get(user_id).shiki_id
+        shiki_user = await self._get_shiki_user(shiki_id, calculate_watchtime)
         self.shiki_users.save(user_id, shiki_user)
 
         metadata = ShikiMetadata(
@@ -107,23 +108,31 @@ class ShikiCog(commands.GroupCog, group_name='shikimori', group_description='...
 
         await dlr_client.push_metadata(discord_token, metadata)
 
-    async def _get_shiki_user(self, user_id: int, count_watchtime: bool = False) -> ShikiUser:
-        shiki_token = self.shiki_tokens.get(user_id)
+    async def _get_shiki_user(self, shiki_id: int, calculate_watchtime: bool = False) -> ShikiUser:
+        # shiki_token = self.shiki_tokens.get(user_id)
         shiki_client = ShikiClient(
             application_name=os.environ['SHIKI_APPLICATION_NAME'],
             client_id=os.environ['SHIKI_CLIENT_ID'],
             client_secret=os.environ['SHIKI_CLIENT_SECRET']
         )
 
-        shiki_info = await shiki_client.get_current_user_info(shiki_token)
-        shiki_id = shiki_info['id']
-        rates = await shiki_client.get_all_user_anime_rates(shiki_id, status='completed')
-        duration = await shiki_client.get_watch_time(shiki_id) if count_watchtime else 0  # float, in minutes
+        # current_user_shiki_info = await shiki_client.get_current_user_info(shiki_token)
+        shiki_info = await shiki_client.go().users.id(shiki_id).get()
+
+        # rates = await shiki_client.get_all_user_anime_rates(shiki_id, status='completed')
+        duration = await shiki_client.fetch_total_watch_time(shiki_id) if calculate_watchtime else 0  # float, minutes
+
+        rates = 0
+        rate_groups = shiki_info['stats']['statuses']['anime']
+        for rate_group in rate_groups:
+            if rate_group['name'] == 'completed':
+                rates = rate_group['size']
+                break
 
         return ShikiUser(
             shiki_id=shiki_id,
             shiki_nickname=shiki_info.get('nickname'),
-            anime_watched=len(rates),
+            anime_watched=rates,
             total_hours=int(duration / 60)
         )
 
