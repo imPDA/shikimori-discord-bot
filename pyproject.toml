@@ -1,0 +1,19 @@
+[project]
+name = "shikimori-discord-bot"
+version = "0.0.1.dev1"
+description = "A simple Discord bot for Shikimori.me"
+readme = {file = "README.md"}
+requires-python = ">= 3.11"
+license = {file = "LICENCE"}
+authors = [
+    {name = "imPDA", mail = "impda@mail.ru"}
+]
+keywords = ["shikimori", "discord", "bot"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: MIT License"
+]
+
+[project.urls]
+Repository = "https://github.com/imPDA/shikimori-discord-bot"
