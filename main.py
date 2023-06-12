@@ -4,11 +4,18 @@ import os
 import discord
 
 from discord import Intents
+from tortoise import Tortoise
 
 from clients.bot import ShikimoriBot
 
 from dotenv import load_dotenv
 load_dotenv()
+
+HOST = os.environ['DB_HOST']
+PORT = os.environ['DB_PORT']
+USER = os.environ['DB_USER']
+PASS = os.environ['DB_PASS']
+NAME = os.environ['DB_NAME']
 
 from cogs.shiki_commands.cog import ShikiCog
 from cogs.ctx_commands.cog import ContextMenuCog
@@ -45,10 +52,16 @@ async def main():
 
     await my_bot.add_cog(SyncCog())
 
+    await Tortoise.init(
+        db_url=f'mysql://{USER}:{PASS}@{HOST}:{PORT}/{NAME}',
+        modules={"models": ["data.models"]}
+    )
+
     try:
         await my_bot.start(os.environ['BOT_TOKEN'])
     except KeyboardInterrupt:
         await my_bot.close()
+        await Tortoise.close_connections()
 
 
 if __name__ == '__main__':
