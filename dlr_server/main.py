@@ -1,6 +1,9 @@
 import os
+import uuid
+from urllib.parse import urlencode
 
 from dlr_light_api import Client
+from shikimori_extended_api import Client as ShikiClient
 from dlr_light_api.datatypes import DiscordToken
 from flask import Flask, redirect, request, Response, make_response
 from flask.sessions import SecureCookieSessionInterface
@@ -14,6 +17,7 @@ print(os.environ.get('CLIENT_ID'))
 from data.datatypes import ShikiMetadata
 from data.databases import discord_tokens_vault
 from data.databases import shiki_users_vault
+from data.databases import shiki_tokens_vault
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('COOKIE_SECRET')
@@ -27,6 +31,13 @@ linked_role_client = Client(
     client_secret=os.environ['DLR_CLIENT_SECRET'],
     redirect_uri=os.environ['DLR_REDIRECT_URI'],
     discord_token=os.environ['BOT_TOKEN']
+)
+
+shiki_client = ShikiClient(
+    application_name=os.environ['SHIKI_APPLICATION_NAME'],
+    client_id=os.environ['SHIKI_CLIENT_ID'],
+    client_secret=os.environ['SHIKI_CLIENT_SECRET'],
+    redirect_uri='https://impda.duckdns.org:500/shikimori-oauth-callback'
 )
 
 
@@ -95,8 +106,28 @@ async def _update_metadata(user_id: int):
     print(await linked_role_client.get_metadata(token))
 
 
+@app.route('/shikimori-auth')
+def shikimori_auth():
+    response = make_response(redirect(shiki_client.auth_url))
+    return response
+
+
+@app.route('/shikimori-oauth-callback')
+async def shikimori_oauth_callback():
+    code = request.args.get("code")
+    print(code)
+    token = await shiki_client.get_access_token(code)
+    user = await shiki_client.get_current_user_info(token)
+    print(user)
+    print(user['id'])
+    print(token)
+    shiki_tokens_vault.save(user['id'], token)
+
+    return redirect("https://shikimori.me/")
+
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True, ssl_context='adhoc')
 
     # Now if you run this code and navigate to https://yourwebsite/linked-role you will be redirected to Discord
     # authorization page. After confirmation, you will receive token and then redirected to `REDIRECT_URL`.

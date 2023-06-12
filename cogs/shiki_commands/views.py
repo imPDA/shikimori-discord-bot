@@ -1,4 +1,23 @@
 from discord import Interaction, ui, TextStyle
+from discord.ui import Item
+from shikimori_extended_api.datatypes import ShikiToken
+
+from data import shiki_tokens_vault, shiki_users_vault
+
+
+class CheckAuthorizationView(ui.View):
+    @ui.button(label="Проверить авторизацию")
+    async def check_button(self, interaction: Interaction, button) -> None:
+        # check if there is a fresh token in DB. If so: authorized
+        shiki_id = shiki_users_vault.get(interaction.user.id).shiki_id
+        shiki_token: ShikiToken = shiki_tokens_vault.get(shiki_id)
+        if shiki_token and not shiki_token.is_expired:
+            await interaction.response.send_message("Авторизован!", ephemeral=True)
+        else:
+            await interaction.response.send_message("Не авторизован!", ephemeral=True)
+
+    async def on_error(self, interaction: Interaction, error: Exception, item: Item[any], /) -> None:
+        print(error)  # TODO logging
 
 
 class AuthCodeModal(ui.Modal, title="Код авторизации"):
@@ -15,7 +34,7 @@ class AuthorizeView(ui.View):
         self.auth_code = None
 
     @ui.button(label='Ввести код')
-    async def button_with_link(self, interaction: Interaction, button):
+    async def button_with_link(self, interaction: Interaction, button):  # why it is the `button with link` ?
         modal = AuthCodeModal()
         await interaction.response.send_modal(modal)
         await modal.wait()

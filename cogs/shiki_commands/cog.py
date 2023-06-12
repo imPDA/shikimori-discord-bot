@@ -13,8 +13,7 @@ from shikimori_extended_api import Client as ShikiClient
 from data import Vault
 from data.datatypes import ShikiMetadata, ShikiUser
 
-from .views import AuthorizeView
-
+from .views import CheckAuthorizationView
 
 ROOT_URL = 'https://shikimori.me'
 
@@ -41,37 +40,20 @@ class ShikiCog(commands.GroupCog, group_name='shikimori', group_description='...
 
     @command(name='authorize', description="Авторизоваться")
     async def authorize(self, interaction: Interaction):
-        view = AuthorizeView()
-
         shiki_client = ShikiClient(
             application_name=os.environ['SHIKI_APPLICATION_NAME'],
             client_id=os.environ['SHIKI_CLIENT_ID'],
-            client_secret=os.environ['SHIKI_CLIENT_SECRET']
+            client_secret=os.environ['SHIKI_CLIENT_SECRET'],
+            redirect_uri='https://impda.duckdns.org:500/shikimori-oauth-callback'
         )
 
-        await interaction.response.send_message(  # noqa
-            f"1) Перейди по [ссылке]({shiki_client.auth_url}) и авторизуйся на Шикимори\n"
-            f"2) Нажми на кнопку и введи полученный код авторизации",
+        view = CheckAuthorizationView()
+        await interaction.response.send_message(
+            f"Нужно перейти по [ссылке]({shiki_client.auth_url}), войти под своим профилем и авторизовать бота\n",  # noqa
             view=view,
             suppress_embeds=True,
             ephemeral=True,
         )
-        await view.wait()
-
-        msg: Message = await interaction.followup.send("Проверяю код...", ephemeral=True)
-        try:
-            print(view.auth_code)
-            token = await shiki_client.get_access_token(view.auth_code)
-        except ClientResponseError as e:
-            print(e)  # TODO logging
-            return await msg.edit(content="❎ Код неверный!")
-
-        if token:
-            await msg.edit(content="✅ Код верный!")
-            self.shiki_tokens.save(interaction.user.id, token)
-            await self._update_info(interaction.user.id)
-        else:
-            await msg.edit(content="❎ Код неверный!")
 
     @command(name='update', description="Обновить информацию")
     @describe(update_watch_time="Обновить время просмотра тоже (долго!)")
@@ -80,12 +62,20 @@ class ShikiCog(commands.GroupCog, group_name='shikimori', group_description='...
         await self._update_info(interaction.user.id, update_watch_time)
         await interaction.edit_original_response(content="Данные обновлены!")
 
-    async def _update_info(self, user_id: int, calculate_watchtime: bool) -> bool:
+    async def _update_info(self, user_id: int, calculate_watchtime: bool = False) -> bool:
         discord_token: DiscordToken = self.discord_tokens.get(user_id)
         if not discord_token:
             return False
 
-        shiki_id = self.shiki_users.get(user_id).shiki_id
+        # shiki_id = self.shiki_users.get(user_id).shiki_id
+        shiki_client = ShikiClient(
+            application_name=os.environ['SHIKI_APPLICATION_NAME'],
+            client_id=os.environ['SHIKI_CLIENT_ID'],
+            client_secret=os.environ['SHIKI_CLIENT_SECRET']
+        )
+        shiki_user_info = await shiki_client.get_current_user_info(self.shiki_tokens.get(user_id))
+        shiki_id = shiki_user_info['id']
+
         shiki_user = await self._get_shiki_user(shiki_id, calculate_watchtime)
         self.shiki_users.save(user_id, shiki_user)
 
