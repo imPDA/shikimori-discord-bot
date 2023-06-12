@@ -28,7 +28,7 @@ def field_value(text: str) -> str:
     return text[:1024-3] + "..." if len(text) > 1024 else text
 
 
-@guilds(922919845450903573, )
+@guilds(922919845450903573, 1115512510519443458)
 class ShikiCog(commands.GroupCog, group_name='shikimori', group_description='...'):
     # TODO description
 

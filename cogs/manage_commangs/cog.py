@@ -12,7 +12,7 @@ from dlr_light_api import Client as DLRClient
 from data.datatypes import ShikiMetadata
 
 
-@guilds(922919845450903573, )
+@guilds(922919845450903573, 1115512510519443458)
 @has_permissions(administrator=True)
 class ManageCog(commands.GroupCog, group_name='shikimori_manage', group_description='...'):
 

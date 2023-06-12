@@ -18,7 +18,7 @@ class ContextMenuCog(Cog):
         open_profile_ctx_command = ContextMenu(
             name='Профиль shikimori.me',
             callback=self.open_profile,
-            guild_ids=[922919845450903573, ],  # TODO discord.Object
+            guild_ids=[922919845450903573, 1115512510519443458],  # TODO discord.Object
         )
         open_profile_ctx_command.error(coro=self.open_profile_error)
         self.bot.tree.add_command(open_profile_ctx_command)
