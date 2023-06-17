@@ -681,3 +681,4 @@ cython_debug/
 /shikimori/db/settings.py
 /shikimori/server/settings.py
 /.env
+/ssl/

@@ -1,18 +1,24 @@
 from discord import Interaction, ui, TextStyle
 from discord.ui import Item
-# from shikimori_extended_api.datatypes import ShikiToken as ShToken
-#
-# from data import shiki_tokens_vault, shiki_users_vault
-from data.models import User
+from shikimori_extended_api.datatypes import ShikiToken
+
+from data.models import UserModel, ShikiTokenModel
 
 
 class CheckAuthorizationView(ui.View):
     @ui.button(label="Проверить авторизацию")
     async def check_button(self, interaction: Interaction, button) -> None:
         # check if there is a fresh token in DB. If so: authorized
-        user: User = await User.get_or_none(discord_user_id=interaction.user.id)  # noqa
+        user: UserModel = await UserModel.get_or_none(discord_user_id=interaction.user.id)  # noqa
         # shiki_id = shiki_users_vault.get(interaction.user.id).shiki_id
-        if (token := await user.shiki_token) and not token.is_expired:
+        token_data: ShikiTokenModel = await user.shikimori_token
+        token = ShikiToken(
+            access_token=token_data.access_token,
+            refresh_token=token_data.refresh_token,
+            expires_in=token_data.expires_in,
+            expires_at=token_data.expires_at.replace(tzinfo=None)
+        )
+        if token and not token.is_expired:
             await interaction.response.send_message("Авторизован!", ephemeral=True)
         else:
             await interaction.response.send_message("Не авторизован!", ephemeral=True)

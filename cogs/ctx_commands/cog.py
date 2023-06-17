@@ -2,21 +2,19 @@ from discord import Interaction, Member
 from discord.ext.commands import Cog, Bot
 from discord.app_commands import ContextMenu
 
-from data import Vault
+from data.models import UserModel
 
 
 class ContextMenuCog(Cog):
     # TODO description
 
-    def __init__(self, bot: Bot, shiki_users_vault: Vault):
+    def __init__(self, bot: Bot):
         super().__init__()
-
-        self.shiki_users = shiki_users_vault
         self.bot = bot
 
     def cog_load(self) -> None:
         open_profile_ctx_command = ContextMenu(
-            name='Профиль shikimori.me',
+            name="Профиль shikimori.me",
             callback=self.open_profile,
             guild_ids=[922919845450903573, 1115512510519443458],  # TODO discord.Object
         )
@@ -24,20 +22,18 @@ class ContextMenuCog(Cog):
         self.bot.tree.add_command(open_profile_ctx_command)
 
     async def open_profile(self, interaction: Interaction, member: Member):
-        shiki_user = self.shiki_users.get(member.id)
-        if not shiki_user:
+        user_data: UserModel = await UserModel.get(discord_user_id=interaction.user.id)
+        if not user_data.shikimori_user_id:
             return await interaction.response.send_message(
                 f"{member.mention} не связал профиль Шикимори с дискордом",
                 ephemeral=True
             )
 
         await interaction.response.send_message(
-            f"Ссылка на Шикимори профиль {member.mention}: https://shikimori.me/{shiki_user.shiki_nickname}",
+            f"Ссылка на Шикимори профиль {member.mention}: https://shikimori.me/{user_data.shikimori_nickname}",
             suppress_embeds=True,
             ephemeral=True,
         )
 
-    async def open_profile_error(self, interaction, error):
+    async def open_profile_error(self, interaction: Interaction, error):
         print(error)  # TODO logging
-
-# TODO оформление

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import os
+
 from datetime import datetime, timezone
 
 from tortoise.models import Model
-from tortoise import fields
+from tortoise import fields, Tortoise, run_async
 
 
-class Token(Model):
+class TokenModel(Model):
     user_id = fields.BigIntField()
     access_token = fields.CharField(max_length=60)
     refresh_token = fields.CharField(max_length=60)
@@ -21,27 +23,49 @@ class Token(Model):
         return datetime.now(tz=timezone.utc) > self.expires_at
 
 
-class DiscordToken(Token):
-    pass
+class DiscordTokenModel(TokenModel):
+    class Meta:
+        table = 'discordtokens'
 
 
-class ShikiToken(Token):
-    pass
+class ShikiTokenModel(TokenModel):
+    class Meta:
+        table = 'shikimoritokens'
 
 
-class User(Model):
+class UserModel(Model):
     discord_user_id = fields.BigIntField()
-    shiki_user_id = fields.IntField()
+    shikimori_user_id = fields.IntField(null=True)
 
-    shiki_nickname = fields.CharField(max_length=255)
-    anime_watched = fields.IntField()
-    total_hours = fields.IntField()
+    shikimori_nickname = fields.CharField(max_length=255, null=True)  # TODO find out max length
+    anime_watched = fields.IntField(null=True)
+    total_hours = fields.IntField(null=True)
 
-    discord_token = fields.ForeignKeyField('models.DiscordToken', null=True)
-    shiki_token = fields.ForeignKeyField('models.ShikiToken', null=True)
+    discord_token = fields.ForeignKeyField('models.DiscordTokenModel', null=True)
+    shikimori_token = fields.ForeignKeyField('models.ShikiTokenModel', null=True)
 
     def __str__(self):
-        return f"User<{self.shiki_nickname}>"
+        return f"User<{self.shikimori_nickname}>"
+
+    class Meta:
+        table = 'users'
+
+
+# import dotenv
+# dotenv.load_dotenv('../.env')
+#
+# HOST = os.environ['DB_HOST']
+# PORT = os.environ['DB_PORT']
+# USER = os.environ['DB_USER']
+# PASS = os.environ['DB_PASS']
+# NAME = os.environ['DB_NAME']
+#
+# run_async(
+#     Tortoise.init(
+#         db_url=f'mysql://{USER}:{PASS}@{HOST}:{PORT}/{NAME}',
+#         modules={"models": ["__main__"]}
+#     )
+# )
 
 
 if __name__ == '__main__':
@@ -61,7 +85,8 @@ if __name__ == '__main__':
     async def init():
         await Tortoise.init(
             db_url=f'mysql://{USER}:{PASS}@{HOST}:{PORT}/{NAME}',
-            modules={'models': ["__main__"]}
+            modules={'models': ["__main__"]},
+            use_tz=True
         )
 
         await Tortoise.generate_schemas()
