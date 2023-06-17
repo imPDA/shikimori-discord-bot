@@ -20,7 +20,7 @@ class TokenModel(Model):
 
     @property
     def is_expired(self):
-        return datetime.now(tz=timezone.utc) > self.expires_at
+        return datetime.now() > self.expires_at
 
 
 class DiscordTokenModel(TokenModel):
@@ -85,8 +85,7 @@ if __name__ == '__main__':
     async def init():
         await Tortoise.init(
             db_url=f'mysql://{USER}:{PASS}@{HOST}:{PORT}/{NAME}',
-            modules={'models': ["__main__"]},
-            use_tz=True
+            modules={'models': ["__main__"]}
         )
 
         await Tortoise.generate_schemas()

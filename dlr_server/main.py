@@ -120,7 +120,7 @@ async def _update_metadata(discord_user_id: int):
         access_token=token_data.access_token,
         refresh_token=token_data.refresh_token,
         expires_in=token_data.expires_in,
-        expires_at=token_data.expires_at.replace(tzinfo=None)
+        expires_at=token_data.expires_at
     )
 
     if token.is_expired:
